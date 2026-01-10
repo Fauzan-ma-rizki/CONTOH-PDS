@@ -74,11 +74,3 @@ try:
 
 except FileNotFoundError:
     st.warning("Data belum tersedia. Klik tombol Scraping di sidebar.")
-
-# Resource Tabel
-st.markdown("---")
-st.table({
-    "No.": [1, 2, 3],
-    "Alamat": ["Link Live", "Source Code", "Sumber Data"],
-    "Link": ["Streamlit Cloud", "GitHub", "Google Maps"]
-})
