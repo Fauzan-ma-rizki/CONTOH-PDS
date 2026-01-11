@@ -8,111 +8,110 @@ from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 
-def scrape_jabar_raya(total_target=10):
+def scrape_jabar_raya(total_target=1500):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    # Tambahkan User-Agent agar tidak dianggap bot oleh Google
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     
-    cities = {
-        "Bandung": (-6.9175, 107.6191), "Bekasi": (-6.2383, 106.9756),
-        "Bogor": (-6.5971, 106.8060), "Depok": (-6.4025, 106.7942),
-        "Cirebon": (-6.7320, 108.5523), "Sukabumi": (-6.9277, 106.9300),
-        "Tasikmalaya": (-7.3274, 108.2207), "Karawang": (-6.3073, 107.2931),
-        "Cimahi": (-6.8741, 107.5443), "Garut": (-7.2232, 107.9000)
+    # DAFTAR 27 WILAYAH JAWA BARAT
+    locations = {
+        "Kota Bandung": (-6.9175, 107.6191), "Kab. Bandung": (-7.0251, 107.5197), 
+        "Kab. Bandung Barat": (-6.8452, 107.4478), "Kota Bogor": (-6.5971, 106.8060), 
+        "Kab. Bogor": (-6.4797, 106.8249), "Kota Depok": (-6.4025, 106.7942),
+        "Kota Bekasi": (-6.2383, 106.9756), "Kab. Bekasi": (-6.2651, 107.1265), 
+        "Kab. Karawang": (-6.3073, 107.2931), "Kab. Garut": (-7.2232, 107.9000),
+        "Kab. Purwakarta": (-6.5567, 107.4428), "Kab. Subang": (-6.5715, 107.7587),
+        "Kota Cirebon": (-6.7320, 108.5523), "Kab. Cirebon": (-6.7500, 108.4800),
+        "Kab. Indramayu": (-6.3264, 108.3241), "Kab. Cianjur": (-6.8219, 107.1394),
+        "Kab. Sukabumi": (-7.0000, 106.6000), "Kota Sukabumi": (-6.9277, 106.9300),
+        "Kab. Sumedang": (-6.8589, 107.9164), "Kab. Majalengka": (-6.8361, 108.2274),
+        "Kab. Kuningan": (-6.9764, 108.4828), "Kab. Ciamis": (-7.3262, 108.3533),
+        "Kota Tasikmalaya": (-7.3274, 108.2207), "Kab. Tasikmalaya": (-7.4500, 108.1000),
+        "Kab. Pangandaran": (-7.6833, 108.4833), "Kota Cimahi": (-6.8741, 107.5443),
+        "Kota Banjar": (-7.3698, 108.5333)
     }
     
-    data_per_city = total_target // len(cities)
+    categories = ["Bakso dan Mie Ayam", "Ayam Bakar", "Pecel Lele", "Sate","Nasi Padang", "Soto", "Nasi Goreng", "Bakmie", "Dimsum"]
+    
     all_data = []
-
+    
+    # Setup Driver dengan penanganan error koneksi
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
+    except:
+        driver = webdriver.Chrome(options=chrome_options)
 
-        for city, coords in cities.items():
+    print(f"=== Memulai Scraping Sistematis (Target Maksimal: {total_target} Data) ===")
+
+    try:
+        for loc_name, coords in locations.items():
             if len(all_data) >= total_target: break
             
-            print(f"Scraping di {city}...")
-            # Menggunakan URL pencarian langsung agar lebih akurat
-            driver.get(f"https://www.google.com/maps/search/kuliner+di+{city}")
-            time.sleep(8) # Tunggu lebih lama agar rating muncul
+            for cat in categories:
+                if len(all_data) >= total_target: break
+                
+                query = f"{cat} di {loc_name}".replace(" ", "+")
+                print(f"🔎 Mengambil data: {cat} di {loc_name}...")
+                
+                driver.get(f"http://www.google.com/maps/search/{query}")
+                time.sleep(5) # Memberi waktu lebih untuk loading awal
 
-            try:
-                scrollable_div = driver.find_element(By.XPATH, '//div[@role="feed"]')
-                for _ in range(15): 
-                    driver.execute_script('arguments[0].scrollTop = arguments[0].scrollHeight', scrollable_div)
-                    time.sleep(2)
-            except: pass
-
-            # Mengambil elemen kontainer utama tiap toko
-            places = driver.find_elements(By.CLASS_NAME, "hfpxzc")
-            
-            count = 0
-            for p in places:
-                if count >= data_per_city: break
                 try:
-                    name = p.get_attribute("aria-label")
-                    
-                    # Mencari elemen teks di sekitar (parent/sibling)
-                    # Kita ambil teks dari elemen pembungkus yang lebih besar
-                    parent_element = p.find_element(By.XPATH, "./../../..")
-                    info_text = parent_element.text
-                    
-                    lines = info_text.split('\n')
-                    
-                    # 1. Ekstraksi RATING (Mencari pola angka seperti 4.5 atau 4,5)
-                    rating = 0.0
-                    for line in lines:
-                        # Google Maps biasanya menulis: "4,5 (123)" atau "4.5 (123)"
-                        if '(' in line and (',' in line or '.' in line):
-                            potential_rating = line.split('(')[0].strip().replace(',', '.')
-                            try:
-                                rating = float(potential_rating)
-                                if rating > 5.0: rating = 0.0 # Validasi
-                                break
-                            except: continue
+                    # Scroll lebih dalam (5 kali) agar mendapatkan lebih banyak data per kategori
+                    scrollable_div = driver.find_element(By.XPATH, '//div[@role="feed"]')
+                    for _ in range(5):
+                        driver.execute_script('arguments[0].scrollTop = arguments[0].scrollHeight', scrollable_div)
+                        time.sleep(1.5)
+                except: pass
 
-                    # 2. Ekstraksi STATUS BUKA/TUTUP
-                    status = "Tutup"
-                    if "Buka" in info_text:
-                        status = "Buka"
-                    elif "Buka pukul" in info_text:
-                        status = "Buka"
+                # Ambil SEMUA data yang muncul (batasan [:10] dihapus)
+                places = driver.find_elements(By.CLASS_NAME, "hfpxzc")
+                
+                for p in places:
+                    if len(all_data) >= total_target: break # Berhenti jika sudah 1500
+                    try:
+                        name = p.get_attribute("aria-label")
+                        parent_text = p.find_element(By.XPATH, "./../../..").text
+                        
+                        # Ekstraksi Rating
+                        rating = 0.0
+                        lines = parent_text.split('\n')
+                        for line in lines:
+                            if '(' in line and (',' in line or '.' in line):
+                                try:
+                                    rating = float(line.split('(')[0].strip().replace(',', '.'))
+                                    break
+                                except: continue
 
-                    # 3. Ekstraksi JAM OPERASIONAL
-                    jam = "Jam tidak tersedia"
-                    for line in lines:
-                        if "pukul" in line.lower() or "tutup" in line.lower() or "buka" in line.lower():
-                            jam = line
-                            break
-
-                    if name and name not in [d['Nama'] for d in all_data]:
-                        all_data.append({
-                            "Nama": name,
-                            "Kota": city,
-                            "Kategori": random.choice(["Bakso", "Cafe", "Seblak", "Seafood", "Kopi", "Restoran"]),
-                            "Rating": rating,
-                            "Jam": jam,
-                            "Status": status,
-                            "lat": coords[0] + random.uniform(-0.04, 0.04),
-                            "lng": coords[1] + random.uniform(-0.04, 0.04)
-                        })
-                        count += 1
-                except: continue
+                        # Hindari duplikat nama
+                        if name and name not in [d['Nama'] for d in all_data]:
+                            all_data.append({
+                                "Nama": name,
+                                "Wilayah": loc_name,
+                                "Kategori": cat,
+                                "Rating": rating,
+                                "Status": "Buka" if "Buka" in parent_text else "Tutup",
+                                "lat": coords[0] + random.uniform(-0.02, 0.02),
+                                "lng": coords[1] + random.uniform(-0.02, 0.02)
+                            })
+                    except: continue
             
-            print(f"Berhasil mengambil {count} data dari {city}.")
+            print(f"✅ Progres: {len(all_data)} data terkumpul.")
 
+        # Simpan ke CSV
         df_final = pd.DataFrame(all_data)
-        # Pastikan kolom Rating benar-benar angka
-        df_final['Rating'] = pd.to_numeric(df_final['Rating'], errors='coerce').fillna(0.0)
         df_final.to_csv("data_jabar_umkm.csv", index=False)
+        print(f"🎉 Scraping Selesai! Total data yang didapat: {len(df_final)}")
         driver.quit()
         return True
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"❌ Error Terjadi: {e}")
+        if 'driver' in locals(): driver.quit()
         return False
 
 if __name__ == "__main__":
-    scrape_jabar_raya(10)
+    # Menjalankan dengan target 1500 data
+    scrape_jabar_raya(1500)
