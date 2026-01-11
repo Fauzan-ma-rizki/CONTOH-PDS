@@ -74,13 +74,41 @@ try:
     # Gemini AI
     st.markdown("---")
     st.subheader("🤖 Analisis Konsultan AI Gemini")
-    if model_ai:
+    
+    if model_ai is not None:
         user_msg = st.chat_input("Tanyakan strategi bisnis...")
+        
         if user_msg:
+            # Tampilkan pesan user di chat
+            with st.chat_message("user"):
+                st.markdown(user_msg)
+            
+            # Respon Assistant
             with st.chat_message("assistant"):
-                prompt = f"Analisis data UMKM: {filtered_df[chart_col].value_counts().to_dict()}. Pertanyaan: {user_msg}"
-                st.write(model_ai.generate_content(prompt).text)
+                with st.spinner("Sedang memikirkan strategi..."):
+                    try:
+                        # Menyiapkan konteks data agar AI tidak bingung jika data kosong
+                        if not filtered_df.empty:
+                            ringkasan = filtered_df[chart_col].value_counts().to_dict()
+                            konteks = f"Data UMKM saat ini: {ringkasan}."
+                        else:
+                            konteks = "Data UMKM saat ini kosong."
+                        
+                        # Gabungkan konteks dengan pertanyaan user
+                        full_prompt = f"{konteks} Pertanyaan user: {user_msg}. Berikan saran bisnis yang taktis."
+                        
+                        # Memanggil API
+                        response = model_ai.generate_content(full_prompt)
+                        
+                        if response.text:
+                            st.markdown(response.text)
+                        else:
+                            st.warning("AI memberikan respon kosong.")
+                            
+                    except Exception as e:
+                        # Menangani error API (NotFound, Quota, dll) dengan elegan
+                        st.error(f"Gagal mendapatkan respon AI. Error: {e}")
+    else:
+        st.warning("Fitur AI tidak aktif karena API Key tidak valid.")
 
-except FileNotFoundError:
-    st.warning("Data belum tersedia. Silakan klik 'Perbarui Data'.")
 
