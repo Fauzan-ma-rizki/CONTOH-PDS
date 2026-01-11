@@ -25,7 +25,7 @@ def group_kategori(kat):
     return 'Lainnya'
 
 # 2. Sidebar Navigation
-st.sidebar.markdown("### 🧭 BI Navigator")
+st.sidebar.markdown("### Analisis Peluang Usaha UMKM")
 menu = st.sidebar.radio(
     "Menu Utama:",
     ["💡 Rekomendasi Peluang", "📊 Analisis Visual", "📍 Peta GIS"]
@@ -128,3 +128,4 @@ if os.path.exists("data_jabar_umkm.csv"):
 else:
     st.title("📊 Strategic Advisor UMKM Jawa Barat")
     st.info("Database belum tersedia. Silakan klik tombol 'Scrape Data Real-Time' di sidebar untuk memulai.")
+
