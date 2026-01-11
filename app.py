@@ -12,7 +12,13 @@ st.set_page_config(page_title="Big Data UMKM Jawa Barat", layout="wide")
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .stMetric { 
+        background-color: #ffffff; 
+        padding: 15px; 
+        border-radius: 10px; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+        border-left: 5px solid #007bff;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -27,34 +33,31 @@ menu = st.sidebar.radio(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("🔍 Filter Data")
-
-# Tombol Scraping di Sidebar
-if st.sidebar.button("🚀 Perbarui 1000 Data Jabar"):
-    from scrapper import scrape_jabar_raya
-    with st.spinner('Proses scraping sedang berjalan...'):
-        if scrape_jabar_raya(1000):
-            st.success("✅ Data Berhasil Diperbarui!")
-            st.rerun()
+st.sidebar.subheader("🔍 Filter Wilayah")
 
 # --- LOGIKA DATA ---
 try:
     df = pd.read_csv("data_jabar_umkm.csv")
+    # Pastikan Rating adalah tipe numerik
     df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce').fillna(0.0)
     
-    # Filter Wilayah
+    # Filter Wilayah (Nama Kota)
     list_kota = ["Seluruh Jawa Barat"] + sorted(df['Kota'].unique().tolist())
-    selected_city = st.sidebar.selectbox("Pilih Wilayah:", list_kota)
-    
-    # Filter Kategori (Search)
-    search_food = st.sidebar.text_input("🍔 Cari Kategori Kuliner:", placeholder="Contoh: Bakso")
+    selected_city = st.sidebar.selectbox("Pilih Kota/Kabupaten:", list_kota)
 
-    # Eksekusi Filter
+    # Tombol Scraping diletakkan di bawah filter
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚀 Perbarui 1000 Data Jabar"):
+        from scrapper import scrape_jabar_raya
+        with st.spinner('Proses scraping sedang berjalan...'):
+            if scrape_jabar_raya(1000):
+                st.success("✅ Data Berhasil Diperbarui!")
+                st.rerun()
+
+    # Eksekusi Filter Wilayah
     filtered_df = df.copy()
     if selected_city != "Seluruh Jawa Barat":
         filtered_df = filtered_df[filtered_df['Kota'] == selected_city]
-    if search_food:
-        filtered_df = filtered_df[filtered_df['Kategori'].str.contains(search_food, case=False)]
 
     # --- ROUTING HALAMAN BERDASARKAN MENU ---
 
@@ -64,43 +67,49 @@ try:
             counts = filtered_df['Kategori'].value_counts()
             avg_ratings = filtered_df.groupby('Kategori')['Rating'].mean().reset_index()
             
+            st.markdown("### Ringkasan Eksekutif")
             c1, c2, c3 = st.columns(3)
             with c1:
                 st.success(f"### ✅ Peluang Emas\n**{counts.idxmin()}**")
-                st.caption(f"Persaingan terendah ({counts.min()} kompetitor).")
+                st.caption(f"Kategori dengan persaingan terendah ({counts.min()} kompetitor).")
             with c2:
                 st.warning(f"### ⚠️ Peluang Sulit\n**{counts.idxmax()}**")
-                st.caption(f"Pasar jenuh ({counts.max()} kompetitor).")
+                st.caption(f"Pasar paling jenuh ({counts.max()} kompetitor).")
             with c3:
+                # Cari rating tertinggi
                 best_cat = avg_ratings.loc[avg_ratings['Rating'].idxmax()]
                 st.error(f"### 🚩 Risiko Kualitas\n**{best_cat['Kategori']}**")
-                st.caption(f"Ekspektasi tinggi (Rating {best_cat['Rating']:.1f}).")
+                st.caption(f"Ekspektasi pelanggan sangat tinggi (Avg Rating {best_cat['Rating']:.1f}).")
             
             st.markdown("---")
-            st.info(f"👉 **Rekomendasi Strategis:** Di wilayah {selected_city}, sektor **{counts.idxmin()}** adalah pilihan terbaik untuk investasi baru karena minimnya persaingan.")
+            st.info(f"👉 **Strategi Rekomendasi:** Untuk wilayah **{selected_city}**, sektor **{counts.idxmin()}** menawarkan hambatan masuk (barrier to entry) terendah. Disarankan untuk memfokuskan investasi pada sektor ini.")
         else:
-            st.warning("Data tidak tersedia untuk filter ini.")
+            st.warning("Data tidak tersedia. Silakan perbarui data di sidebar.")
 
     elif menu == "📈 Analisis Grafik":
         st.title(f"📈 Distribusi Pasar & Kualitas: {selected_city}")
         if not filtered_df.empty:
             col1, col2 = st.columns(2)
             with col1:
-                fig_pie = px.pie(filtered_df, names='Kategori', title="Market Share Kompetitor", hole=0.4)
+                fig_pie = px.pie(filtered_df, names='Kategori', title="Market Share Kompetitor", hole=0.4,
+                                 color_discrete_sequence=px.colors.qualitative.Pastel)
                 st.plotly_chart(fig_pie, use_container_width=True)
             with col2:
                 avg_df = filtered_df.groupby('Kategori')['Rating'].mean().reset_index()
                 fig_bar = px.bar(avg_df, x='Kategori', y='Rating', color='Rating', 
-                                 title="Kualitas Layanan (Avg Rating)", color_continuous_scale='RdYlGn', range_y=[0,5])
+                                 title="Kualitas Layanan (Avg Rating)", 
+                                 color_continuous_scale='RdYlGn', range_y=[0,5],
+                                 text_auto='.1f')
                 st.plotly_chart(fig_bar, use_container_width=True)
         else:
-            st.warning("Data tidak tersedia untuk filter ini.")
+            st.warning("Data tidak tersedia.")
 
     elif menu == "📍 Pemetaan GIS (Peta)":
-        st.title(f"📍 Lokasi Kompetitor: {selected_city}")
+        st.title(f"📍 Pemetaan Lokasi Kompetitor: {selected_city}")
         if not filtered_df.empty:
             map_center = [filtered_df['lat'].mean(), filtered_df['lng'].mean()]
-            m = folium.Map(location=map_center, zoom_start=12)
+            m = folium.Map(location=map_center, zoom_start=12 if selected_city != "Seluruh Jawa Barat" else 9)
+            
             marker_cluster = MarkerCluster().add_to(m)
 
             for _, row in filtered_df.iterrows():
@@ -113,10 +122,10 @@ try:
             
             st_folium(m, width=1300, height=600)
         else:
-            st.warning("Data tidak tersedia untuk filter ini.")
+            st.warning("Data tidak tersedia.")
 
 except Exception as e:
-    st.info("👋 Selamat Datang! Silakan klik tombol 'Perbarui 1000 Data Jabar' di sidebar untuk memulai.")
+    st.info("👋 Selamat Datang! Silakan klik tombol 'Perbarui 1000 Data Jabar' di sidebar untuk menginisialisasi database.")
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Tugas Besar UMKM Jabar © 2026")
+st.sidebar.caption("Sistem Informasi Geografis UMKM Jabar © 2026")
