@@ -3,95 +3,82 @@ import pandas as pd
 import plotly.express as px
 import folium
 from streamlit_folium import st_folium
-from google import genai # Pustaka Baru
-import os
-
-# 1. Konfigurasi Client AI Baru (SDK v1)
-@st.cache_resource
-def load_genai_client():
-    try:
-        api_key = st.secrets["GEMINI_API_KEY"]
-        client = genai.Client(api_key=api_key)
-        return client
-    except Exception as e:
-        return None
-
-client_ai = load_genai_client()
 
 st.set_page_config(page_title="Analisis Peluang UMKM Jabar", layout="wide")
 
-# 2. Sidebar
+# Sidebar
 st.sidebar.title("🔍 Navigasi UMKM")
 search_type = st.sidebar.radio("Cari Berdasarkan:", ["Kota/Kabupaten", "Kategori Makanan"])
 user_query = st.sidebar.text_input(f"Masukkan {search_type}:", placeholder="Contoh: Bandung")
 
 if st.sidebar.button("Perbarui Data (Scraping)"):
-    try:
-        from scrapper import scrape_gmaps
-        with st.spinner('Scraping data asli sedang berjalan...'):
-            scrape_gmaps("kuliner jawa barat", total_data=50)
+    from scrapper import scrape_gmaps
+    with st.spinner('Mengambil data asli dari Google Maps...'):
+        sukses = scrape_gmaps("kuliner jawa barat", total_data=60)
+        if sukses:
             st.rerun()
-    except Exception as e:
-        st.sidebar.error(f"Gagal Scraping: {e}")
 
-# 3. Main Logic
+# Logic Utama
 try:
     df = pd.read_csv("data_jabar_umkm.csv")
     
     if user_query:
         mask = df['Kota'].str.contains(user_query, case=False) if search_type == "Kota/Kabupaten" else df['Kategori'].str.contains(user_query, case=False)
         filtered_df = df[mask]
-        chart_col = 'Kategori' if search_type == "Kota/Kabupaten" else 'Kota'
-        target_name = f"di {user_query}"
+        target_col = 'Kategori' if search_type == "Kota/Kabupaten" else 'Kota'
     else:
         filtered_df = df
-        chart_col = 'Kategori'
-        target_name = "Jawa Barat"
+        target_col = 'Kategori'
 
-    st.title(f"🚀 Analisis Peluang Bisnis {target_name}")
+    st.title(f"🚀 Analisis Strategis UMKM: {user_query if user_query else 'Jawa Barat'}")
 
-    # Visualisasi
-    c1, c2 = st.columns(2)
-    with c1:
-        st.plotly_chart(px.pie(filtered_df, names=chart_col, title="Dominasi Kompetitor", hole=0.4), use_container_width=True)
-    with c2:
-        if not filtered_df.empty:
-            avg_rating = filtered_df.groupby(chart_col)['Rating'].mean().reset_index()
-            st.plotly_chart(px.bar(avg_rating, x=chart_col, y='Rating', color='Rating', title="Rata-rata Rating Kompetitor"), use_container_width=True)
-
-    # GIS (Geographic Information System)
-    st.subheader("📍 Peta Sebaran & Jam Operasional Asli")
-    m = folium.Map(location=[-6.9175, 107.6191], zoom_start=12)
-    for _, row in filtered_df.head(50).iterrows():
-        popup_info = f"<b>{row['Nama']}</b><br>🕒 {row['Jam']}<br>⭐ {row['Rating']}"
-        folium.Marker([row['lat'], row['lng']], popup=folium.Popup(popup_info, max_width=200),
-                      icon=folium.Icon(color="blue" if row['Status']=="Buka" else "red")).add_to(m)
-    st_folium(m, width=1300, height=450)
-
-    # Chat AI Gemini (SDK v1)
-    st.markdown("---")
-    st.subheader("🤖 Konsultan Strategi Bisnis (Gemini v1)")
-    if client_ai:
-        user_msg = st.chat_input("Tanyakan strategi pemasaran atau modal usaha...")
-        if user_msg:
-            with st.chat_message("user"): st.write(user_msg)
-            with st.chat_message("assistant"):
-                try:
-                    stats = filtered_df[chart_col].value_counts().head(5).to_dict()
-                    prompt = f"Data UMKM: {stats}. Pertanyaan: {user_msg}. Berikan saran bisnis singkat."
-                    
-                    # Pemanggilan model menggunakan SDK baru
-                    response = client_ai.models.generate_content(
-                        model='gemini-1.5-flash',
-                        contents=prompt
-                    )
-                    st.write(response.text)
-                except Exception as e:
-                    st.error("AI sedang sibuk atau limit tercapai. Tunggu 1 menit.")
+    # --- BAGIAN KESIMPULAN OTOMATIS (PENGGANTI AI) ---
+    st.info("### 💡 Kesimpulan Strategis Berbasis Data")
+    if not filtered_df.empty:
+        kompetitor_terbanyak = filtered_df[target_col].value_counts().idxmax()
+        kompetitor_terkecil = filtered_df[target_col].value_counts().idxmin()
+        rating_tertinggi = filtered_df.groupby(target_col)['Rating'].mean().idxmax()
+        
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Kompetitor Terpadat", kompetitor_terbanyak)
+        c2.metric("Peluang Emas (Min Kompetitor)", kompetitor_terkecil)
+        c3.metric("Kualitas Terbaik di Area", rating_tertinggi)
+        
+        st.write(f"👉 **Saran Bisnis:** Jika Anda ingin membuka usaha di area ini, sektor **{kompetitor_terkecil}** memiliki persaingan paling rendah. Namun, perhatikan bahwa **{rating_tertinggi}** memiliki standar kualitas (rating) yang sangat tinggi di mata pelanggan.")
     else:
-        st.warning("Konfigurasi AI belum lengkap. Periksa API Key di Secrets.")
+        st.warning("Data tidak ditemukan untuk analisis kesimpulan.")
+
+    # --- VISUALISASI ---
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(px.pie(filtered_df, names=target_col, title="Dominasi Pasar Kompetitor", hole=0.4), use_container_width=True)
+    with col2:
+        if not filtered_df.empty:
+            avg_rate = filtered_df.groupby(target_col)['Rating'].mean().reset_index()
+            st.plotly_chart(px.bar(avg_rate, x=target_col, y='Rating', color='Rating', title="Rata-rata Rating per Kategori"), use_container_width=True)
+
+    # --- GIS MAP ---
+    st.subheader("📍 Peta Lokasi & Status Operasional Toko")
+    m = folium.Map(location=[-6.9175, 107.6191], zoom_start=12)
+    for _, row in filtered_df.head(40).iterrows():
+        # Warna marker berdasarkan status buka/tutup
+        warna = "blue" if row['Status'] == "Buka" else "red"
+        popup_html = f"""
+        <div style='font-family: Arial; width: 200px;'>
+            <b>{row['Nama']}</b><br>
+            ⭐ Rating: {row['Rating']}<br>
+            🕒 Jam: {row['Jam']}<br>
+            📍 Status: {row['Status']}
+        </div>
+        """
+        folium.Marker(
+            [row['lat'], row['lng']], 
+            popup=folium.Popup(popup_html, max_width=250),
+            icon=folium.Icon(color=warna, icon="shopping-cart", prefix="fa")
+        ).add_to(m)
+    st_folium(m, width=1300, height=500)
 
 except FileNotFoundError:
-    st.warning("Data belum tersedia. Silakan klik 'Perbarui Data' di sidebar.")
+    st.warning("Silakan klik tombol 'Perbarui Data' untuk memulai scraping data.")
 except Exception as e:
-    st.error(f"Error Sistem: {e}")
+    st.error(f"Terjadi kesalahan teknis: {e}")
