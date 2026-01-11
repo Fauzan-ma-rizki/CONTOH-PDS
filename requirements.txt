@@ -6,3 +6,4 @@ streamlit-folium
 selenium
 webdriver-manager
 numpy
+google-generativeai
