@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 # Konfigurasi Gemini
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model_ai = genai.GenerativeModel('gemini-pro')
+    model_ai = genai.GenerativeModel('gemini-1.5-flash')
 except:
     model_ai = None
 
@@ -83,3 +83,4 @@ try:
 
 except FileNotFoundError:
     st.warning("Data belum tersedia. Silakan klik 'Perbarui Data'.")
+
