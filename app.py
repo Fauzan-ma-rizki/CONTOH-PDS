@@ -4,149 +4,97 @@ import plotly.express as px
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster
+import os
 
-# 1. Konfigurasi Halaman & Tema
-st.set_page_config(
-    page_title="Sistem Informasi Strategis UMKM Jabar", 
-    page_icon="🏪",
-    layout="wide"
-)
+# 1. Konfigurasi Halaman (Harus di baris paling atas setelah import)
+st.set_page_config(page_title="Analisis Strategis UMKM Jabar", layout="wide")
 
-# --- 2. CUSTOM CSS UNTUK UI MODERN ---
+# 2. CSS agar UI Menarik & Terlihat Profesional
 st.markdown("""
     <style>
-    .main { background-color: #f0f2f6; }
+    .main { background-color: #f8f9fa; }
     .stMetric { 
         background-color: #ffffff; 
-        padding: 20px; 
-        border-radius: 12px; 
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-        border-bottom: 4px solid #007BFF;
+        padding: 15px; 
+        border-radius: 10px; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+        border-left: 5px solid #007bff;
     }
-    .stSidebar { background-color: #ffffff; }
-    h1, h2, h3 { color: #1E1E1E; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. SIDEBAR NAVIGATION ---
-st.sidebar.markdown("<h1 style='text-align: center;'>📊 ANALISIS UMKM</h1>", unsafe_allow_html=True)
-st.sidebar.markdown("---")
-
-# Menu Navigasi dengan Ikon
+# 3. Sidebar Navigation
+st.sidebar.title("📊 Dashboard Navigasi")
 menu = st.sidebar.radio(
-    "🧭 MENU NAVIGASI",
-    ["💡 Kesimpulan Strategis", "📈 Analisis Grafik", "📍 Pemetaan GIS (Peta)"],
-    captions=["Insight peluang bisnis", "Data visual kompetitor", "Sebaran lokasi real-time"]
+    "Pilih Menu:",
+    ["💡 Kesimpulan Strategis", "📈 Analisis Grafik", "📍 Pemetaan GIS (Peta)"]
 )
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("🗺️ FILTER WILAYAH")
+st.sidebar.subheader("⚙️ Kontrol Data")
 
-# --- 4. LOGIKA DATA ---
-try:
+# Tombol Scraping
+if st.sidebar.button("🚀 Ambil 1000 Data Se-Jabar"):
+    from scrapper import scrape_jabar_raya
+    with st.spinner('Sedang mengambil data...'):
+        if scrape_jabar_raya(1000):
+            st.success("Data Berhasil Diperbarui!")
+            st.rerun()
+
+# 4. Logika Loading Data
+if os.path.exists("data_jabar_umkm.csv"):
     df = pd.read_csv("data_jabar_umkm.csv")
     df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce').fillna(0.0)
     
-    # Filter Wilayah
+    # Filter Kota
     list_kota = ["Seluruh Jawa Barat"] + sorted(df['Kota'].unique().tolist())
-    selected_city = st.sidebar.selectbox("Pilih Kota/Kabupaten:", list_kota)
-
-    # Tombol Scraping di Sidebar
-    st.sidebar.markdown("---")
-    if st.sidebar.button("🚀 PERBARUI 1000 DATA JABAR", use_container_width=True):
-        from scrapper import scrape_jabar_raya
-        with st.spinner('Sedang menarik data dari Google Maps...'):
-            if scrape_jabar_raya(1000):
-                st.success("✅ Data Berhasil Disinkronkan!")
-                st.rerun()
-
-    # Eksekusi Filter Kota
+    selected_city = st.sidebar.selectbox("📍 Pilih Wilayah:", list_kota)
+    
     filtered_df = df.copy()
     if selected_city != "Seluruh Jawa Barat":
-        filtered_df = filtered_df[filtered_df['Kota'] == selected_city]
+        filtered_df = df[df['Kota'] == selected_city]
 
-    # --- 5. ROUTING HALAMAN ---
-
+    # --- TAMPILAN BERDASARKAN MENU ---
+    
     if menu == "💡 Kesimpulan Strategis":
-        st.markdown(f"# 💡 Insight Strategis Bisnis: {selected_city}")
-        st.write("Analisis tingkat kejenuhan pasar dan peluang kompetitif.")
-        
+        st.title(f"💡 Strategi Bisnis: {selected_city}")
         if not filtered_df.empty:
             counts = filtered_df['Kategori'].value_counts()
-            avg_ratings = filtered_df.groupby('Kategori')['Rating'].mean().reset_index()
+            avg_ratings = filtered_df.groupby('Kategori')['Rating'].mean()
             
-            # Row 1: Metrics
             c1, c2, c3 = st.columns(3)
-            with c1:
-                st.metric(label="🏆 PELUANG EMAS (MIN SAINGAN)", value=counts.idxmin(), delta="Persaingan Rendah")
-            with c2:
-                st.metric(label="⚠️ PASAR JENUH (MAX SAINGAN)", value=counts.idxmax(), delta="Persaingan Tinggi", delta_color="inverse")
-            with c3:
-                best_cat = avg_ratings.loc[avg_ratings['Rating'].idxmax()]
-                st.metric(label="🚩 STANDAR KUALITAS TERTINGGI", value=best_cat['Kategori'], delta=f"{best_cat['Rating']:.1f} Stars")
+            c1.metric("✅ Peluang Emas", counts.idxmin(), f"{counts.min()} Toko")
+            c2.metric("⚠️ Peluang Sulit", counts.idxmax(), f"{counts.max()} Toko", delta_color="inverse")
+            c3.metric("🚩 Risiko Kualitas", avg_ratings.idxmax(), f"{avg_ratings.max():.1f} ⭐")
             
-            st.markdown("---")
-            # Row 2: Detailed Insight
-            st.info(f"""
-            ### 📝 Rekomendasi Untuk Pengusaha:
-            Berdasarkan data sebaran di **{selected_city}**, kategori **{counts.idxmin()}** memiliki hambatan masuk yang paling rendah. 
-            Jika Anda ingin membuka usaha di kategori **{counts.idxmax()}**, pastikan Anda memiliki keunggulan unik (Unique Selling Point) karena pasar sudah sangat padat.
-            """)
+            st.info(f"Rekomendasi: Sektor **{counts.idxmin()}** adalah peluang terbaik di {selected_city}.")
         else:
-            st.warning("Data belum tersedia. Silakan klik 'Perbarui Data' di sidebar.")
+            st.warning("Data untuk wilayah ini kosong.")
 
     elif menu == "📈 Analisis Grafik":
-        st.markdown(f"# 📈 Visualisasi Distribusi Pasar: {selected_city}")
-        
-        if not filtered_df.empty:
-            col1, col2 = st.columns(2)
-            with col1:
-                fig_pie = px.pie(
-                    filtered_df, names='Kategori', 
-                    title="<b>Dominasi Kategori Kompetitor</b>", 
-                    hole=0.5,
-                    color_discrete_sequence=px.colors.qualitative.Bold
-                )
-                st.plotly_chart(fig_pie, use_container_width=True)
-            
-            with col2:
-                avg_df = filtered_df.groupby('Kategori')['Rating'].mean().reset_index()
-                fig_bar = px.bar(
-                    avg_df, x='Kategori', y='Rating', color='Rating', 
-                    title="<b>Kualitas Layanan (Rata-rata Rating)</b>", 
-                    color_continuous_scale='RdYlGn',
-                    text_auto='.1f'
-                )
-                fig_bar.update_layout(yaxis_range=[0,5])
-                st.plotly_chart(fig_bar, use_container_width=True)
-        else:
-            st.warning("Data belum tersedia.")
+        st.title("📈 Distribusi Pasar & Kualitas")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(px.pie(filtered_df, names='Kategori', title="Dominasi Kategori", hole=0.4), use_container_width=True)
+        with col2:
+            avg_df = filtered_df.groupby('Kategori')['Rating'].mean().reset_index()
+            st.plotly_chart(px.bar(avg_df, x='Kategori', y='Rating', color='Rating', title="Avg Rating", range_y=[0,5]), use_container_width=True)
 
     elif menu == "📍 Pemetaan GIS (Peta)":
-        st.markdown(f"# 📍 Sebaran Geografis Kompetitor: {selected_city}")
-        st.write("Warna Biru: Buka | Warna Merah: Tutup")
-        
-        if not filtered_df.empty:
-            map_center = [filtered_df['lat'].mean(), filtered_df['lng'].mean()]
-            m = folium.Map(location=map_center, zoom_start=12, tiles="cartodbpositron")
-            
-            marker_cluster = MarkerCluster().add_to(m)
+        st.title("📍 Pemetaan Lokasi Kompetitor")
+        m = folium.Map(location=[filtered_df['lat'].mean(), filtered_df['lng'].mean()], zoom_start=11)
+        marker_cluster = MarkerCluster().add_to(m)
+        for _, row in filtered_df.iterrows():
+            folium.Marker(
+                [row['lat'], row['lng']],
+                popup=row['Nama'],
+                icon=folium.Icon(color="blue" if row['Status']=="Buka" else "red", icon="utensils", prefix="fa")
+            ).add_to(marker_cluster)
+        st_folium(m, width=1300, height=600)
 
-            for _, row in filtered_df.iterrows():
-                # Ikon Keren: Menggunakan FontAwesome utensils (sendok garpu)
-                color = "blue" if row['Status'] == "Buka" else "red"
-                folium.Marker(
-                    location=[row['lat'], row['lng']],
-                    popup=folium.Popup(f"<b>{row['Nama']}</b><br>Rating: ⭐{row['Rating']}<br>Status: {row['Status']}", max_width=300),
-                    icon=folium.Icon(color=color, icon="utensils", prefix="fa")
-                ).add_to(marker_cluster)
-            
-            st_folium(m, width=1300, height=600)
-        else:
-            st.warning("Data belum tersedia.")
-
-except Exception as e:
-    st.info("👋 **Selamat Datang!** Database belum terdeteksi. Silakan klik tombol **'PERBARUI 1000 DATA JABAR'** di sidebar untuk memulai scraping data real-time.")
-
-st.sidebar.markdown("---")
-st.sidebar.caption("Sistem Intelijen Bisnis UMKM Jabar © 2026")
+else:
+    # UI Tampilan Awal jika CSV Belum Ada
+    st.title("🏪 Selamat Datang di Dashboard UMKM Jabar")
+    st.image("https://cdn-icons-png.flaticon.com/512/3168/3168190.png", width=150)
+    st.warning("Data belum tersedia di server.")
+    st.info("Silakan klik tombol **'Ambil 1000 Data Se-Jabar'** di sebelah kiri untuk memulai proses scraping.")
