@@ -3,79 +3,115 @@ import pandas as pd
 import plotly.express as px
 import folium
 from streamlit_folium import st_folium
+from folium.plugins import MarkerCluster
 
-st.set_page_config(page_title="Analisis Peluang UMKM Jabar", layout="wide")
+st.set_page_config(page_title="Big Data UMKM Jawa Barat", layout="wide")
 
-# Database koordinat untuk memindahkan peta otomatis
-city_coords = {
-    "Bandung": [-6.9175, 107.6191],
-    "Bekasi": [-6.2383, 106.9756],
-    "Bogor": [-6.5971, 106.8060],
-    "Depok": [-6.4025, 106.7942],
-    "Cirebon": [-6.7320, 108.5523],
-    "Sukabumi": [-6.9277, 106.9300]
-}
+# --- SIDEBAR ---
+st.sidebar.title("📊 Navigasi Big Data")
+st.sidebar.info("Gunakan tombol di bawah untuk mengambil 1000 data terbaru dari berbagai kota di Jawa Barat.")
 
-# Sidebar
-st.sidebar.title("🔍 Navigasi UMKM")
-search_type = st.sidebar.radio("Cari Berdasarkan:", ["Kota/Kabupaten", "Kategori Makanan"])
-user_query = st.sidebar.text_input(f"Masukkan {search_type}:", value="Bandung")
-
-if st.sidebar.button("Perbarui Data (Scraping)"):
-    from scrapper import scrape_gmaps
-    with st.spinner(f'Mengambil data kuliner di {user_query}...'):
-        # Kirim user_query sebagai parameter kota ke scraper
-        sukses = scrape_gmaps("kuliner", city=user_query, total_data=40)
-        if sukses:
-            st.success(f"Data {user_query} Berhasil Diperbarui!")
+if st.sidebar.button("🚀 Ambil 1000 Data Se-Jabar"):
+    from scrapper import scrape_jabar_raya
+    with st.spinner('Proses scraping 1000 data sedang berjalan (estimasi 5-8 menit)...'):
+        if scrape_jabar_raya(1000):
+            st.success("✅ 1000 Data Berhasil Diperbarui!")
             st.rerun()
 
-# Logic Utama
+# --- LOGIKA DATA ---
 try:
     df = pd.read_csv("data_jabar_umkm.csv")
     
-    # Filter data agar hanya menampilkan yang relevan dengan pencarian
-    if user_query:
-        mask = df['Kota'].str.contains(user_query, case=False) if search_type == "Kota/Kabupaten" else df['Kategori'].str.contains(user_query, case=False)
-        filtered_df = df[mask]
-    else:
+    # Filter Kota di Sidebar
+    list_kota = ["Seluruh Jawa Barat"] + sorted(df['Kota'].unique().tolist())
+    selected_city = st.sidebar.selectbox("Pilih Wilayah Analisis:", list_kota)
+    
+    if selected_city == "Seluruh Jawa Barat":
         filtered_df = df
+    else:
+        filtered_df = df[df['Kota'] == selected_city]
 
-    st.title(f"🚀 Analisis Strategis UMKM: {user_query}")
+    # --- HEADER ---
+    st.title(f"🚀 Dashboard Strategis UMKM: {selected_city}")
+    st.markdown(f"Menganalisis total **{len(filtered_df)}** titik kompetitor kuliner.")
 
-    # --- KESIMPULAN OTOMATIS ---
-    st.info("### 💡 Kesimpulan Strategis Berbasis Data")
     if not filtered_df.empty:
-        # Penentuan target kolom untuk analisis
-        target_col = 'Kategori' if search_type == "Kota/Kabupaten" else 'Kota'
-        counts = filtered_df[target_col].value_counts()
+        # --- HITUNG STATISTIK ---
+        counts = filtered_df['Kategori'].value_counts()
+        avg_ratings = filtered_df.groupby('Kategori')['Rating'].mean()
         
+        # --- KESIMPULAN STRATEGIS 3 PILAR ---
+        st.subheader("💡 Analisis Peluang & Risiko Bisnis")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Kompetitor Dominan", counts.idxmax())
-        c2.metric("Peluang Emas", counts.idxmin())
-        c3.metric("Rating Tertinggi", filtered_df.groupby(target_col)['Rating'].mean().idxmax())
-    
-    # --- GIS MAP (SINKRON DENGAN KOTA) ---
-    st.subheader(f"📍 Sebaran Kuliner di {user_query}")
-    
-    # Tentukan titik tengah peta berdasarkan kota yang dicari
-    map_center = city_coords.get(user_query, [-6.9175, 107.6191])
-    
-    m = folium.Map(location=map_center, zoom_start=13)
-    
-    for _, row in filtered_df.iterrows():
-        warna = "blue" if row['Status'] == "Buka" else "red"
-        folium.Marker(
-            [row['lat'], row['lng']], 
-            popup=f"<b>{row['Nama']}</b><br>⭐ {row['Rating']}<br>🕒 {row['Jam']}",
-            icon=folium.Icon(color=warna, icon="utensils", prefix="fa")
-        ).add_to(m)
-    
-    st_folium(m, width=1300, height=500)
+        
+        with c1:
+            st.success(f"### ✅ Peluang Emas\n**{counts.idxmin()}**")
+            st.write(f"Kategori ini memiliki jumlah saingan paling sedikit ({counts.min()} toko). Peluang besar untuk menjadi market leader.")
+        
+        with c2:
+            st.warning(f"### ⚠️ Peluang Sulit\n**{counts.idxmax()}**")
+            st.write(f"Pasar sudah **JENUH** dengan {counts.max()} kompetitor. Persaingan harga di {selected_city} akan sangat berdarah-darah.")
+            
+        with c3:
+            st.error(f"### 🚩 Risiko Kualitas\n**{avg_ratings.idxmax()}**")
+            st.write(f"Ekspektasi pelanggan sangat tinggi (Avg Rating {avg_ratings.max():.1f}). Anda butuh modal besar untuk standar layanan premium.")
 
-    # Tabel Data
-    with st.expander("Lihat Detail Data Mentah"):
-        st.dataframe(filtered_df)
+        # --- VISUALISASI GRAFIK ---
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig_pie = px.pie(
+                filtered_df, 
+                names='Kategori', 
+                title="Dominasi Kategori Kompetitor (Market Share)",
+                hole=0.4,
+                color_discrete_sequence=px.colors.qualitative.Safe
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+        with col2:
+            avg_df = avg_ratings.reset_index()
+            fig_bar = px.bar(
+                avg_df, 
+                x='Kategori', 
+                y='Rating', 
+                title="Standar Kualitas Kompetitor (Avg Rating)",
+                color='Rating',
+                color_continuous_scale='RdYlGn',
+                range_y=[0, 5]
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
 
-except FileNotFoundError:
-    st.warning("Data belum tersedia. Klik 'Perbarui Data' di sidebar untuk mencari.")
+        # --- GIS MAP DENGAN MARKER CLUSTER ---
+        st.markdown("---")
+        st.subheader(f"📍 Pemetaan Geografis Kompetitor ({selected_city})")
+        
+        # Tentukan pusat peta
+        center_lat = filtered_df['lat'].mean()
+        center_lng = filtered_df['lng'].mean()
+        
+        m = folium.Map(location=[center_lat, center_lng], zoom_start=9 if selected_city == "Seluruh Jawa Barat" else 12)
+        
+        # Gunakan MarkerCluster agar 1000 data tidak berat saat di-render
+        marker_cluster = MarkerCluster().add_to(m)
+
+        for _, row in filtered_df.iterrows():
+            status_color = "blue" if row['Status'] == "Buka" else "red"
+            folium.Marker(
+                location=[row['lat'], row['lng']],
+                popup=f"<b>{row['Nama']}</b><br>⭐ {row['Rating']}<br>🕒 {row['Jam']}",
+                icon=folium.Icon(color=status_color, icon="utensils", prefix="fa")
+            ).add_to(marker_cluster)
+        
+        st_folium(m, width=1300, height=550)
+
+    else:
+        st.warning("Data tidak ditemukan untuk filter ini.")
+
+except Exception as e:
+    st.info("👋 **Selamat Datang!** Data belum tersedia. Silakan klik tombol **'Ambil 1000 Data Se-Jabar'** di sidebar untuk memulai analisis big data.")
+
+# --- FOOTER ---
+st.markdown("---")
+st.caption("Tugas Besar Analisis Peluang UMKM - Berbasis Real-time Google Maps Scraping")
