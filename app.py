@@ -9,13 +9,14 @@ st.set_page_config(page_title="Analisis Peluang UMKM Jabar", layout="wide")
 # Sidebar
 st.sidebar.title("🔍 Navigasi UMKM")
 search_type = st.sidebar.radio("Cari Berdasarkan:", ["Kota/Kabupaten", "Kategori Makanan"])
-user_query = st.sidebar.text_input(f"Masukkan {search_type}:", placeholder="Contoh: Bandung")
+user_query = st.sidebar.text_input(f"Masukkan {search_type}:", placeholder="Contoh: Bandung atau Bakso")
 
 if st.sidebar.button("Perbarui Data (Scraping)"):
     from scrapper import scrape_gmaps
     with st.spinner('Mengambil data asli dari Google Maps...'):
         sukses = scrape_gmaps("kuliner jawa barat", total_data=60)
         if sukses:
+            st.success("Data berhasil diperbarui!")
             st.rerun()
 
 # Logic Utama
@@ -32,36 +33,36 @@ try:
 
     st.title(f"🚀 Analisis Strategis UMKM: {user_query if user_query else 'Jawa Barat'}")
 
-    # --- BAGIAN KESIMPULAN OTOMATIS (PENGGANTI AI) ---
+    # --- KESIMPULAN OTOMATIS ---
     st.info("### 💡 Kesimpulan Strategis Berbasis Data")
     if not filtered_df.empty:
-        kompetitor_terbanyak = filtered_df[target_col].value_counts().idxmax()
-        kompetitor_terkecil = filtered_df[target_col].value_counts().idxmin()
+        counts = filtered_df[target_col].value_counts()
+        kompetitor_terbanyak = counts.idxmax()
+        kompetitor_terkecil = counts.idxmin()
         rating_tertinggi = filtered_df.groupby(target_col)['Rating'].mean().idxmax()
         
         c1, c2, c3 = st.columns(3)
-        c1.metric("Kompetitor Terpadat", kompetitor_terbanyak)
-        c2.metric("Peluang Emas (Min Kompetitor)", kompetitor_terkecil)
-        c3.metric("Kualitas Terbaik di Area", rating_tertinggi)
+        c1.metric("Kompetitor Dominan", kompetitor_terbanyak)
+        c2.metric("Peluang Emas", kompetitor_terkecil)
+        c3.metric("Kualitas Tertinggi", rating_tertinggi)
         
-        st.write(f"👉 **Saran Bisnis:** Jika Anda ingin membuka usaha di area ini, sektor **{kompetitor_terkecil}** memiliki persaingan paling rendah. Namun, perhatikan bahwa **{rating_tertinggi}** memiliki standar kualitas (rating) yang sangat tinggi di mata pelanggan.")
+        st.write(f"👉 **Analisis:** Kategori **{kompetitor_terbanyak}** sudah sangat jenuh di area ini. Jika ingin membuka usaha baru, sektor **{kompetitor_terkecil}** menawarkan peluang karena tingkat persaingan paling rendah.")
     else:
-        st.warning("Data tidak ditemukan untuk analisis kesimpulan.")
+        st.warning("Data tidak ditemukan. Silakan lakukan 'Perbarui Data'.")
 
     # --- VISUALISASI ---
     col1, col2 = st.columns(2)
     with col1:
-        st.plotly_chart(px.pie(filtered_df, names=target_col, title="Dominasi Pasar Kompetitor", hole=0.4), use_container_width=True)
+        st.plotly_chart(px.pie(filtered_df, names=target_col, title="Sebaran Kategori Kuliner", hole=0.4), use_container_width=True)
     with col2:
         if not filtered_df.empty:
             avg_rate = filtered_df.groupby(target_col)['Rating'].mean().reset_index()
-            st.plotly_chart(px.bar(avg_rate, x=target_col, y='Rating', color='Rating', title="Rata-rata Rating per Kategori"), use_container_width=True)
+            st.plotly_chart(px.bar(avg_rate, x=target_col, y='Rating', color='Rating', title="Kepuasan Pelanggan (Avg Rating)"), use_container_width=True)
 
     # --- GIS MAP ---
-    st.subheader("📍 Peta Lokasi & Status Operasional Toko")
+    st.subheader("📍 Peta Lokasi & Status Toko")
     m = folium.Map(location=[-6.9175, 107.6191], zoom_start=12)
     for _, row in filtered_df.head(40).iterrows():
-        # Warna marker berdasarkan status buka/tutup
         warna = "blue" if row['Status'] == "Buka" else "red"
         popup_html = f"""
         <div style='font-family: Arial; width: 200px;'>
@@ -74,11 +75,9 @@ try:
         folium.Marker(
             [row['lat'], row['lng']], 
             popup=folium.Popup(popup_html, max_width=250),
-            icon=folium.Icon(color=warna, icon="shopping-cart", prefix="fa")
+            icon=folium.Icon(color=warna, icon="utensils", prefix="fa")
         ).add_to(m)
     st_folium(m, width=1300, height=500)
 
 except FileNotFoundError:
-    st.warning("Silakan klik tombol 'Perbarui Data' untuk memulai scraping data.")
-except Exception as e:
-    st.error(f"Terjadi kesalahan teknis: {e}")
+    st.warning("Data belum tersedia. Klik 'Perbarui Data' di sidebar.")
