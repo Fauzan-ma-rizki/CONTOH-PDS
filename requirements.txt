@@ -3,6 +3,7 @@ pandas
 plotly
 folium
 streamlit-folium
-google-generativeai
+google-genai
 selenium
 webdriver-manager
+
