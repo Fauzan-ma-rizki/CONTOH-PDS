@@ -17,20 +17,16 @@ def scrape_jabar_raya(total_target=1500):
     
     # DAFTAR 27 WILAYAH JAWA BARAT
     locations = {
-        "Kota Bandung": (-6.9175, 107.6191), "Kab. Bandung": (-7.0251, 107.5197), 
-        "Kab. Bandung Barat": (-6.8452, 107.4478), "Kota Bogor": (-6.5971, 106.8060), 
-        "Kab. Bogor": (-6.4797, 106.8249), "Kota Depok": (-6.4025, 106.7942),
-        "Kota Bekasi": (-6.2383, 106.9756), "Kab. Bekasi": (-6.2651, 107.1265), 
-        "Kab. Karawang": (-6.3073, 107.2931), "Kab. Garut": (-7.2232, 107.9000),
-        "Kab. Purwakarta": (-6.5567, 107.4428), "Kab. Subang": (-6.5715, 107.7587),
-        "Kota Cirebon": (-6.7320, 108.5523), "Kab. Cirebon": (-6.7500, 108.4800),
-        "Kab. Indramayu": (-6.3264, 108.3241), "Kab. Cianjur": (-6.8219, 107.1394),
-        "Kab. Sukabumi": (-7.0000, 106.6000), "Kota Sukabumi": (-6.9277, 106.9300),
-        "Kab. Sumedang": (-6.8589, 107.9164), "Kab. Majalengka": (-6.8361, 108.2274),
-        "Kab. Kuningan": (-6.9764, 108.4828), "Kab. Ciamis": (-7.3262, 108.3533),
-        "Kota Tasikmalaya": (-7.3274, 108.2207), "Kab. Tasikmalaya": (-7.4500, 108.1000),
-        "Kab. Pangandaran": (-7.6833, 108.4833), "Kota Cimahi": (-6.8741, 107.5443),
-        "Kota Banjar": (-7.3698, 108.5333)
+    "Kota Bandung": (-6.9175, 107.6191), 
+    "Kab. Bandung": (-7.0251, 107.5197), 
+    "Kab. Bandung Barat": (-6.8452, 107.4478), 
+    "Kota Bogor": (-6.5971, 106.8060),
+    "Kab. Bogor": (-6.4797, 106.8249), 
+    "Kota Depok": (-6.4025, 106.7942),
+    "Kota Bekasi": (-6.2383, 106.9756), 
+    "Kab. Bekasi": (-6.2651, 107.1265), 
+    "Kab. Karawang": (-6.3073, 107.2931), 
+    "Kab. Garut": (-7.2232, 107.9000)
     }
     
     categories = ["Bakso dan Mie Ayam", "Ayam Bakar", "Pecel Lele", "Sate","Nasi Padang", "Soto", "Nasi Goreng", "Bakmie", "Dimsum"]
@@ -57,7 +53,7 @@ def scrape_jabar_raya(total_target=1500):
                 print(f"🔎 Mengambil data: {cat} di {loc_name}...")
                 
                 driver.get(f"http://www.google.com/maps/search/{query}")
-                time.sleep(5) # Memberi waktu lebih untuk loading awal
+                time.sleep(5) 
 
                 try:
                     # Scroll lebih dalam (5 kali) agar mendapatkan lebih banyak data per kategori
