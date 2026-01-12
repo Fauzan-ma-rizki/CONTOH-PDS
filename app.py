@@ -3,169 +3,171 @@ import pandas as pd
 import plotly.express as px
 import folium
 from streamlit_folium import st_folium
-from folium.plugins import MarkerCluster
+from folium.plugins import MarkerCluster, HeatMap
 import os
 
-# 1. Konfigurasi Halaman
-st.set_page_config(page_title="Strategic UMKM Advisor - Jabar", page_icon="🎯", layout="wide")
-
-# --- FUNGSI HELPER: Grouping ---
-def group_kategori(kat):
-    kat = str(kat).lower()
-    if 'bakso' in kat or 'mie ayam' in kat or 'bakmie' in kat: return 'Mie & Bakso'
-    if 'ayam bakar' in kat or 'pecel lele' in kat or 'sate' in kat: return 'Lauk Bakar/Goreng'
-    if 'padang' in kat or 'soto' in kat or 'nasi goreng' in kat: return 'Nasi & Soto'
-    if 'dimsum' in kat: return 'Camilan & Dimsum'
-    if 'kopi' in kat or 'cafe' in kat: return 'Kopi & Cafe'
-    return 'Kuliner Lainnya'
-
-# 2. Sidebar Navigation Utama
-st.sidebar.markdown("### Analisis Peluang Usaha Kuliner UMKM")
-menu = st.sidebar.radio(
-    "Menu Utama:",
-    ["💡 Kesimpulan Strategis", "🔍 Market Finder", "📊 Analisis Visual", "📍 Peta GIS Jabar"]
+# 1. KONFIGURASI HALAMAN
+st.set_page_config(
+    page_title="Analisis Peluang Usaha UMKM Di Beberapa Daerah Jabar", 
+    page_icon="🏙️", 
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-st.sidebar.markdown("---")
+# --- DATA KOORDINAT WILAYAH TERPILIH ---
+KOTA_COORDS = {
+    "Kota Bandung": (-6.9175, 107.6191), 
+    "Kab. Bandung": (-7.0251, 107.5197), 
+    "Kab. Bandung Barat": (-6.8452, 107.4478), 
+    "Kota Bogor": (-6.5971, 106.8060),
+    "Kab. Bogor": (-6.4797, 106.8249), 
+    "Kota Depok": (-6.4025, 106.7942),
+    "Kota Bekasi": (-6.2383, 106.9756), 
+    "Kab. Bekasi": (-6.2651, 107.1265), 
+    "Kab. Karawang": (-6.3073, 107.2931), 
+    "Kab. Garut": (-7.2232, 107.9000)
+}
 
-# 3. Logika Loading Data & Filter Global
-if os.path.exists("data_jabar_umkm.csv"):
-    df = pd.read_csv("data_jabar_umkm.csv")
-    df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce').fillna(0.0)
-    df['Kelompok_Bisnis'] = df['Kategori'].apply(group_kategori)
-    col_wil = 'Wilayah' if 'Wilayah' in df.columns else 'Kota'
+# --- FUNGSI HELPER: Logika Pengelompokan Bisnis ---
+def group_kategori(kat):
+    kat = str(kat).lower()
+    if any(x in kat for x in ['bakso', 'mie', 'bakmie']): return '🍜 Mie & Bakso'
+    if any(x in kat for x in ['ayam', 'lele', 'sate', 'bebek']): return '🍗 Lauk Bakar/Goreng'
+    if any(x in kat for x in ['padang', 'soto', 'nasi', 'warung']): return '🍚 Nasi & Soto'
+    if any(x in kat for x in ['dimsum', 'snack', 'roti', 'kue']): return '🥟 Camilan & Dimsum'
+    return '🍽️ Kuliner Lainnya'
 
-    # --- FILTER GLOBAL (Agar tidak reset saat pindah menu) ---
-    st.sidebar.markdown("### 📍 Filter Global")
-    list_wilayah = ["Seluruh Jawa Barat"] + sorted(df[col_wil].unique().tolist())
-    
-    selected_city = st.sidebar.selectbox(
-        "Pilih Lokasi Analisis:", 
-        list_wilayah, 
-        key="global_city_selector"
-    )
-    
-    # Filter Data Global
-    f_df = df if selected_city == "Seluruh Jawa Barat" else df[df[col_wil] == selected_city]
-    
-    st.sidebar.markdown("---")
-    
-    if st.sidebar.button("🚀 Scrape Data Real-Time", use_container_width=True):
-        from scrapper import scrape_jabar_raya
-        with st.spinner('Menghubungkan ke Google Maps...'):
-            if scrape_jabar_raya(1100):
-                st.rerun()
-
-    # --- ISI KONTEN BERDASARKAN MENU ---
-
-    if menu == "💡 Kesimpulan Strategis":
-        st.markdown(f"# 💡 Konsultasi Strategi Bisnis: {selected_city}")
-        st.caption("Analisis kecerdasan bisnis (Business Intelligence) untuk menentukan arah investasi UMKM.")
+# 2. LOAD DATA (KOLOM REVIEWS DIHAPUS)
+@st.cache_data
+def load_data():
+    file_path = "data_jabar_umkm.csv"
+    if os.path.exists(file_path):
+        df = pd.read_csv(file_path)
+            
+        df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce').fillna(0.0)
         
-        if not f_df.empty:
-            counts = f_df['Kategori'].value_counts()
-            ratings = f_df.groupby('Kategori')['Rating'].mean()
-            
-            # Tampilan Metrik Utama
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.success(f"### ✅ Peluang Emas\n**{counts.idxmin()}**")
-                st.write(f"Kompetitor: {counts.min()} Unit")
-            with c2:
-                st.warning(f"### ⚠️ Pasar Jenuh\n**{counts.idxmax()}**")
-                st.write(f"Kompetitor: {counts.max()} Unit")
-            with c3:
-                st.error(f"### 🚩 Kualitas Pasar\n**{ratings.idxmax()}**")
-                st.write(f"Avg Rating: {ratings.max():.1f} ⭐")
-            
-            st.markdown("---")
-            
-            # --- NARASI ANALISIS MENDALAM ---
-            st.subheader("📌 Laporan Rekomendasi Manajerial")
-            
-            col_a, col_b = st.columns(2)
-            
-            with col_a:
-                st.info(f"""
-                **1. Strategi Penetrasi (Blue Ocean):** Di wilayah {selected_city}, kategori **{counts.idxmin()}** menunjukkan tingkat persaingan terendah dengan hanya {counts.min()} unit usaha terdeteksi. 
-                Ini adalah peluang "Blue Ocean" di mana Anda dapat memposisikan diri sebagai pemimpin pasar lebih cepat. 
-                Kurangnya pilihan bagi konsumen di sektor ini memungkinkan Anda memiliki kontrol harga yang lebih baik.
-                """)
-                
-                st.info(f"""
-                **2. Analisis Risiko (Red Ocean):** Kategori **{counts.idxmax()}** telah mencapai titik jenuh di {selected_city} dengan {counts.max()} kompetitor. 
-                Memasuki pasar ini tanpa inovasi radikal sangat berisiko tinggi karena akan terjebak dalam perang harga. 
-                Anda membutuhkan *Unique Selling Point* (USP) yang sangat kuat jika ingin berkompetisi di sini.
-                """)
-
-            with col_b:
-                st.info(f"""
-                **3. Standar Ekspektasi Konsumen:** Berdasarkan data rating, kategori **{ratings.idxmax()}** memiliki standar kualitas tertinggi ({ratings.max():.1f} ⭐). 
-                Hal ini menunjukkan bahwa konsumen di wilayah ini sangat selektif dan melek kualitas. 
-                Pastikan operasional bisnis Anda memiliki standar kontrol kualitas yang ketat untuk memenuhi ekspektasi pasar yang tinggi ini.
-                """)
-                
-                st.info(f"""
-                **4. Rencana Aksi (Action Plan):** Kami menyarankan Anda untuk segera mengevaluasi titik koordinat spesifik melalui menu **Peta GIS**. 
-                Carilah pemukiman padat atau pusat keramaian di {selected_city} yang belum memiliki unit usaha **{counts.idxmin()}**. 
-                Inovasi pada kemasan dan digital marketing akan mempercepat akuisisi pelanggan di wilayah potensial ini.
-                """)
+        if 'Kategori' in df.columns:
+            df['Kelompok_Bisnis'] = df['Kategori'].apply(group_kategori)
         else:
-            st.warning("Data belum tersedia untuk wilayah ini.")
+            df['Kelompok_Bisnis'] = 'Lainnya'
+            
+        return df
+    return None
 
-    elif menu == "🔍 Market Finder":
-        st.markdown("# 🔍 Market Opportunity Finder")
-        st.write("Gunakan alat ini untuk mencari Kota/Kabupaten mana yang paling potensial bagi jenis usaha pilihan Anda.")
+df = load_data()
+
+# 3. SIDEBAR NAVIGATION
+if df is not None:
+    with st.sidebar:
+        st.image("https://cdn-icons-png.flaticon.com/512/3222/3222640.png", width=80)
+        st.title("Dasboard")
+        menu = st.radio(
+            "Navigasi Analisis:",
+            ["💎 Ringkasan Data", "📈 Visualisasi Data", "🗺️ Pemetaan UMKM Daerah Jabar", "📋 Data Mentah UMKM Daerah Jabar"]
+        )
         
-        sel_cat = st.selectbox("Pilih Kategori Usaha yang Ingin Anda Buka:", sorted(df['Kategori'].unique().tolist()))
+        st.markdown("---")
+        col_wil = 'Wilayah' if 'Wilayah' in df.columns else ('Kota' if 'Kota' in df.columns else None)
         
-        if sel_cat:
-            cat_df = df[df['Kategori'] == sel_cat]
-            opp_df = cat_df.groupby(col_wil).agg({
-                'Nama': 'count',
-                'Rating': 'mean'
-            }).reset_index().sort_values(by='Nama', ascending=True)
+        if col_wil:
+            list_wilayah = ["Daerah Jawa Barat"] + sorted(list(KOTA_COORDS.keys()))
+            selected_city = st.selectbox("📍 Fokus Wilayah:", list_wilayah)
             
-            opp_df.columns = ['Wilayah', 'Jumlah Saingan', 'Kualitas Layanan (Rating)']
-            
-            st.success(f"### 🏆 3 Lokasi Terbaik untuk Membuka Usaha **{sel_cat}**")
-            top_3 = opp_df.head(3)
-            cols = st.columns(3)
-            for i, (idx, row) in enumerate(top_3.iterrows()):
-                with cols[i]:
-                    st.metric(f"Peringkat {i+1}", row['Wilayah'], f"{int(row['Jumlah Saingan'])} Kompetitor")
-            
-            st.markdown("---")
-            st.subheader("📋 Perbandingan Kompetisi Seluruh Wilayah")
-            st.dataframe(opp_df, use_container_width=True)
-
-    elif menu == "📊 Analisis Visual":
-        st.markdown(f"# 📊 Perbandingan Industri: {selected_city}")
-        if not f_df.empty:
-            col1, col2 = st.columns(2)
-            with col1:
-                st.plotly_chart(px.pie(f_df, names='Kelompok_Bisnis', title="Dominasi Sektor Kuliner", hole=0.4), use_container_width=True)
-            with col2:
-                avg_df = f_df.groupby('Kelompok_Bisnis')['Rating'].mean().reset_index()
-                st.plotly_chart(px.bar(avg_df, x='Kelompok_Bisnis', y='Rating', color='Rating', title="Tingkat Kepuasan Pelanggan", range_y=[0,5], text_auto='.1f'), use_container_width=True)
-
-    elif menu == "📍 Peta GIS Jabar":
-        st.markdown(f"# 📍 Sebaran Lokasi Kompetitor: {selected_city}")
-        if not f_df.empty:
-            m = folium.Map(location=[f_df['lat'].mean(), f_df['lng'].mean()], zoom_start=11)
-            marker_cluster = MarkerCluster().add_to(m)
-            for _, row in f_df.iterrows():
-                warna = "blue" if row['Status'] == "Buka" else "red"
-                folium.Marker(
-                    [row['lat'], row['lng']], 
-                    popup=f"<b>{row['Nama']}</b><br>Kategori: {row['Kategori']}<br>Status: {row['Status']}",
-                    icon=folium.Icon(color=warna, icon="cutlery", prefix="fa")
-                ).add_to(marker_cluster)
-            st_folium(m, width=1300, height=600)
-
+            if selected_city == "Daerah Jawa Barat":
+                f_df = df
+            else:
+                f_df = df[df[col_wil] == selected_city]
+        else:
+            selected_city = "Semua Data"
+            f_df = df
 else:
-    st.title("📊 Strategic Advisor UMKM Jawa Barat")
-    st.info("Database belum ditemukan. Silakan klik tombol 'Scrape Data Real-Time' di sidebar untuk mengumpulkan data.")
+    st.error("File 'data_jabar_umkm.csv' tidak ditemukan!")
+    st.stop()
 
+# 4. KONTEN UTAMA
+if menu == "💎 Ringkasan Data":
+    st.title(f"📊 Dashboard Strategis: {selected_city}")
+    
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.metric("Total Outlet", f"{len(f_df)} Unit")
+    with c2: st.metric("Avg Rating", f"{f_df['Rating'].mean():.2f} ⭐")
+    with c3:
+        top_sector = f_df['Kelompok_Bisnis'].mode()[0] if not f_df.empty else "N/A"
+        st.metric("Sektor Terpadat", top_sector)
+    with c4:
+        market_potential = "Tinggi" if f_df['Rating'].mean() < 4.3 else "Menengah"
+        st.metric("Potensi Profit", market_potential)
+
+    st.markdown("---")
+    col_left, col_right = st.columns([1, 1.2])
+    
+    with col_left:
+        st.subheader("💡 Rekomendasi Peluang Buka Usaha")
+        if not f_df.empty:
+            counts = f_df['Kelompok_Bisnis'].value_counts()
+            st.info(f"**Market Gap Detected:** Sektor **{counts.idxmin()}** memiliki kompetisi terendah.")
+            st.warning(f"**Saturasi Tinggi:** Sektor **{counts.idxmax()}** sangat padat.")
+        else:
+            st.write("Data kosong.")
+
+    with col_right:
+        if not f_df.empty:
+            fig = px.sunburst(f_df, path=['Kelompok_Bisnis', 'Kategori'], 
+                              values='Rating', 
+                              title="Hierarki Pasar Kuliner (% Kontribusi Rating)")
+            fig.update_traces(textinfo="label+percent parent")
+            st.plotly_chart(fig, use_container_width=True)
+
+elif menu == "📈 Visualisasi Data":
+    st.title("📈 Grafik Dan Rating")
+    tab1, tab2 = st.tabs(["Volume Kompetisi", "Peta Kualitas"])
+    with tab1:
+        comp_df = f_df.groupby('Kategori').agg({'Nama': 'count', 'Rating': 'mean'}).rename(columns={'Nama': 'Total', 'Rating': 'Avg'}).reset_index()
+        fig2 = px.bar(comp_df.sort_values('Total', ascending=False), x='Kategori', y='Total', color='Avg', title="Kategori vs Rating")
+        st.plotly_chart(fig2, use_container_width=True)
+    with tab2:
+        fig3 = px.scatter(f_df, x="Rating", y="Kelompok_Bisnis", size="Rating", color="Kelompok_Bisnis", hover_name="Nama")
+        st.plotly_chart(fig3, use_container_width=True)
+
+elif menu == "🗺️ Pemetaan UMKM Daerah Jabar":
+    st.title(f"📍 Peta Sebaran: {selected_city}")
+    col_map, col_stat = st.columns([3, 1])
+    
+    with col_stat:
+        st.write("**Legend:**")
+        st.success("🔵 Rating > 4.0")
+        st.warning("🟠 Rating <= 4.0")
+        st.markdown("---")
+        show_heatmap = st.checkbox("Aktifkan Heatmap")
+        selected_cat = st.multiselect("Filter Kategori:", f_df['Kelompok_Bisnis'].unique(), default=f_df['Kelompok_Bisnis'].unique())
+
+    with col_map:
+        map_center = KOTA_COORDS.get(selected_city, [-6.9175, 107.6191])
+        zoom_lvl = 12 if selected_city != "Seluruh Jawa Barat" else 9
+        map_df = f_df[f_df['Kelompok_Bisnis'].isin(selected_cat)].dropna(subset=['lat', 'lng'])
+        
+        m = folium.Map(location=map_center, zoom_start=zoom_lvl, tiles="CartoDB positron")
+        if not map_df.empty:
+            if show_heatmap:
+                HeatMap([[r['lat'], r['lng']] for i, r in map_df.iterrows()]).add_to(m)
+            marker_cluster = MarkerCluster().add_to(m)
+            for _, row in map_df.iterrows():
+                folium.Marker([row['lat'], row['lng']], popup=f"{row['Nama']} ({row['Rating']})",
+                              icon=folium.Icon(color="blue" if row['Rating'] > 4.0 else "orange")).add_to(marker_cluster)
+            st_folium(m, width="100%", height=550, key=f"map_{selected_city}")
+
+elif menu == "📋 Data Mentah UMKM Daerah Jabar":
+    st.title("📋 Data Data UMKM")
+    search = st.text_input("Cari Bisnis:")
+    
+    display_df = f_df[f_df['Nama'].str.contains(search, case=False)] if search else f_df.copy()
+    
+    # Membuat Index mulai dari 1
+    display_df.index = range(1, len(display_df) + 1)
+    
+    # Menampilkan tabel data (Tombol unduh CSV telah dihapus)
+    st.dataframe(display_df, use_container_width=True)
+
+# FOOTER
 st.sidebar.markdown("---")
-st.sidebar.caption("© Hak Cipta Kelompok Superman")
+st.sidebar.caption("© Kelompok Superman - Analisis Peluang Usaha UMKM")
