@@ -218,39 +218,48 @@ elif menu == "📋 Data Mentah":
     df_display.index = range(1, len(df_display) + 1)
     st.dataframe(df_display, use_container_width=True)
 
-# ===================== MENU 5: AI ASSISTANT =====================
+## ===================== MENU 5: AI ASSISTANT =====================
 elif menu == "🤖 AI Business Assistant":
     st.title("🤖 SIPETA AI Assistant")
     
-    if not openai_api_key:
-        st.warning("⚠️ Masukkan OpenAI API Key Anda di sidebar untuk mengaktifkan chatbot.")
-    else:
-        openai.api_key = openai_api_key
-        
-        if "messages" not in st.session_state:
-            st.session_state.messages = [
-                {"role": "system", "content": "Anda adalah konsultan bisnis UMKM ahli untuk wilayah Jawa Barat. Gunakan data untuk membantu pengguna memberikan saran strategis."}
-            ]
+    # Inisialisasi Client OpenAI (Sintaks Baru v1.0.0+)
+    from openai import OpenAI
+    
+    try:
+        # Mengambil API Key dari Secrets
+        client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    except Exception as e:
+        st.error("⚠️ API Key tidak ditemukan atau terjadi kesalahan pada Secrets.")
+        st.stop()
 
-        for message in st.session_state.messages:
-            if message["role"] != "system":
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
+    if "messages" not in st.session_state:
+        st.session_state.messages = [
+            {"role": "system", "content": "Anda adalah konsultan bisnis UMKM ahli untuk wilayah Jawa Barat."}
+        ]
 
-        if prompt := st.chat_input("Tanyakan sesuatu tentang peluang bisnis..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+    # Tampilkan chat
+    for message in st.session_state.messages:
+        if message["role"] != "system":
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
-            with st.chat_message("assistant"):
-                response = openai.ChatCompletion.create(
-                    model="gpt-3.5-turbo",
-                    messages=st.session_state.messages
-                )
-                answer = response.choices[0].message.content
-                st.markdown(answer)
-                st.session_state.messages.append({"role": "assistant", "content": answer})
+    # Logika Chat Input
+    if prompt := st.chat_input("Tanyakan sesuatu tentang peluang bisnis..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            # Sintaks Baru untuk Chat Completion
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=st.session_state.messages
+            )
+            answer = response.choices[0].message.content
+            st.markdown(answer)
+            st.session_state.messages.append({"role": "assistant", "content": answer})
 
 # ===================== FOOTER =====================
 st.sidebar.markdown("---")
 st.sidebar.caption("© SIPETA 2026")
+
