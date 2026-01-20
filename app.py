@@ -44,7 +44,6 @@ def group_kategori(kat):
 # ===================== LOAD DATA =====================
 @st.cache_data
 def load_data():
-    # Pastikan file ini ada di direktori yang sama
     if not os.path.exists("data_jabar_umkm.csv"):
         return None
     df = pd.read_csv("data_jabar_umkm.csv")
@@ -54,7 +53,7 @@ def load_data():
 
 df = load_data()
 if df is None:
-    st.error("❌ File data_jabar_umkm.csv tidak ditemukan. Harap unggah file data lebih dulu.")
+    st.error("❌ File data_jabar_umkm.csv tidak ditemukan")
     st.stop()
 
 # ===================== SIDEBAR =====================
@@ -72,13 +71,13 @@ with st.sidebar:
         ]
     )
 
-    st.subheader("📍 Filter Wilayah Global")
+    st.subheader("📍 Filter Daerah Jabar")
     wilayah_sidebar = st.selectbox(
         "Pilih Wilayah",
         ["Daerah Jawa Barat"] + list(KOTA_COORDS.keys())
     )
 
-# ===================== FILTER GLOBAL =====================
+# ===================== FILTER Daerah jabar =====================
 f_df = df.copy()
 if wilayah_sidebar != "Daerah Jawa Barat":
     f_df = f_df[f_df['Wilayah'] == wilayah_sidebar]
@@ -99,65 +98,52 @@ if menu == "💎 Ringkasan Data":
 
     st.markdown("---")
     
-    col_left, col_right = st.columns([1, 1.2])
-
-    with col_left:
-        st.subheader("💡 Rekomendasi Peluang")
-        if not f_df.empty:
-            counts = f_df['Kelompok_Bisnis'].value_counts()
-            st.info(f"**Market Gap:** Sektor **{counts.idxmin()}** memiliki kompetisi terendah.")
-            st.warning(f"**Saturasi Tinggi:** Sektor **{counts.idxmax()}** sudah sangat padat.")
-            
-            st.write("---")
-            st.write("**Top 3 Kategori Populer:**")
-            for i, (kat, val) in enumerate(counts.head(3).items()):
-                st.write(f"{i+1}. {kat} ({val} Outlet)")
-        else:
-            st.write("Data tidak tersedia untuk wilayah ini.")
-
-    with col_right:
-        if not f_df.empty:
-            # MEMBUAT PIE CHART DENGAN PERSENTASE
-            pie_df = f_df['Kelompok_Bisnis'].value_counts().reset_index()
-            pie_df.columns = ['Kelompok', 'Jumlah']
-            
-            fig = px.pie(
-                pie_df, 
-                values='Jumlah', 
-                names='Kelompok', 
-                title="Persentase Distribusi Sektor Kuliner",
-                color_discrete_sequence=px.colors.qualitative.Pastel,
-                hole=0.4
-            )
-            
-            # Pengaturan untuk menampilkan label dan persentase
-            fig.update_traces(
-                textposition='inside', 
-                textinfo='percent+label',
-                hoverinfo='label+value+percent'
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
+    st.subheader("💡 Rekomendasi Peluang Buka Usaha")
+    if not f_df.empty:
+        counts = f_df['Kelompok_Bisnis'].value_counts()
+        st.info(f"**Market Gap Detected:** Sektor **{counts.idxmin()}** memiliki kompetisi terendah.")
+        st.warning(f"**Persaingan Ketat:** Sektor **{counts.idxmax()}** sangat padat.")
+    else:
+        st.write("Data kosong.")
 
 # ===================== MENU 2: VISUALISASI =====================
 elif menu == "📈 Visualisasi Data":
     st.title("📈 Analisis Kompetisi UMKM")
 
     if not f_df.empty:
-        comp = f_df.groupby('Kategori').agg(
-            Total=('Nama', 'count'),
-            Avg_Rating=('Rating', 'mean')
-        ).reset_index()
+        col_bar, col_sun = st.columns(2)
 
-        fig = px.bar(
-            comp.sort_values('Total', ascending=False),
-            x='Kategori',
-            y='Total',
-            color='Avg_Rating',
-            title="Jumlah UMKM per Kategori & Kualitas Rating",
-            color_continuous_scale='RdYlGn'
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        with col_bar:
+            comp = f_df.groupby('Kategori').agg(
+                Total=('Nama', 'count'),
+                Avg_Rating=('Rating', 'mean')
+            ).reset_index()
+
+            fig_bar = px.bar(
+                comp.sort_values('Total', ascending=False),
+                x='Kategori',
+                y='Total',
+                color='Avg_Rating',
+                title="Jumlah UMKM per Kategori",
+                color_continuous_scale='RdYlGn'
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        with col_sun:
+            fig_sun = px.sunburst(
+                f_df,
+                path=['Kelompok_Bisnis', 'Kategori'],
+                values='Rating',
+                title="Struktur Pasar & Persentase Sektor",
+                color='Kelompok_Bisnis',
+                color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            
+            fig_sun.update_traces(
+                textinfo="label+percent entry", 
+                insidetextorientation='radial'
+            )
+            st.plotly_chart(fig_sun, use_container_width=True)
     else:
         st.warning("Tidak ada data untuk divisualisasikan.")
 
@@ -168,7 +154,7 @@ elif menu == "🗺️ Pemetaan UMKM":
     col_map, col_filter = st.columns([3, 1])
 
     with col_filter:
-        st.subheader("🔍 Filter Peta")
+        st.subheader("🔍 Pencarian Peta")
         keyword = st.text_input("Cari Nama UMKM")
         show_heatmap = st.checkbox("Aktifkan Heatmap")
 
@@ -186,10 +172,10 @@ elif menu == "🗺️ Pemetaan UMKM":
 
     with col_map:
         if map_df.empty:
-            st.warning(f"❌ Tidak ada koordinat data ditemukan")
+            st.warning(f"❌ Tidak ada data UMKM ditemukan")
         else:
             center = KOTA_COORDS.get(wilayah_sidebar, (-6.9175, 107.6191))
-            m = folium.Map(location=center, zoom_start=11, tiles="CartoDB positron")
+            m = folium.Map(location=center, zoom_start=11, tiles="CartoDB positron", control_scale=True)
 
             if selected_umkm:
                 r = map_df[map_df['Nama'] == selected_umkm].iloc[0]
@@ -213,22 +199,29 @@ elif menu == "🗺️ Pemetaan UMKM":
                     continue
                 folium.Marker(
                     [row['lat'], row['lng']],
-                    popup=f"<b>{row['Nama']}</b><br>Kategori: {row['Kategori']}<br>⭐ {row['Rating']}",
+                    popup=f"<b>{row['Nama']}</b><br>⭐ {row['Rating']}",
                     icon=folium.Icon(color="blue", icon="info-sign")
                 ).add_to(cluster)
 
-            st_folium(m, width="100%", height=500, key=f"map_{wilayah_sidebar}")
+            map_id = f"map_{wilayah_sidebar}_{selected_umkm}".replace(" ", "_")
+            st_folium(m, width="100%", height=550, key=map_id, returned_objects=[])
             
     st.markdown("---")
-    st.subheader(f"📋 Tabel Data: {wilayah_sidebar}")
-    st.dataframe(map_df[['Nama', 'Wilayah', 'Kategori', 'Rating']], use_container_width=True)
+    st.subheader(f"📋 Daftar UMKM: {wilayah_sidebar}")
+    if not map_df.empty:
+        display_table = map_df[['Nama', 'Wilayah', 'Kategori', 'Rating']].copy()
+        display_table.index = range(1, len(display_table) + 1)
+        st.dataframe(display_table, use_container_width=True)
+    else:
+        st.info("Data tidak tersedia.")
 
 # ===================== MENU 4: DATA MENTAH =====================
 elif menu == "📋 Data Mentah":
     st.title("📋 Data Mentah UMKM")
-    st.write("Data keseluruhan yang dimuat dalam sistem:")
-    st.dataframe(df, use_container_width=True)
+    df_display = df.copy()
+    df_display.index = range(1, len(df_display) + 1)
+    st.dataframe(df_display, use_container_width=True)
 
 # ===================== FOOTER =====================
 st.sidebar.markdown("---")
-st.sidebar.caption("© SIPETA 2026 | Visualisasi UMKM Jawa Barat")
+st.sidebar.caption("© SIPETA 2026")
