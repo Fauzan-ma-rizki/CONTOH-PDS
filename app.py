@@ -5,7 +5,6 @@ import folium
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster, HeatMap
 import os
-import openai
 
 # ===================== KONFIGURASI =====================
 st.set_page_config(
@@ -45,6 +44,7 @@ def group_kategori(kat):
 # ===================== LOAD DATA =====================
 @st.cache_data
 def load_data():
+    # Pastikan file ini ada di direktori yang sama
     if not os.path.exists("data_jabar_umkm.csv"):
         return None
     df = pd.read_csv("data_jabar_umkm.csv")
@@ -54,13 +54,13 @@ def load_data():
 
 df = load_data()
 if df is None:
-    st.error("❌ File data_jabar_umkm.csv tidak ditemukan")
+    st.error("❌ File data_jabar_umkm.csv tidak ditemukan. Harap unggah file data lebih dulu.")
     st.stop()
 
 # ===================== SIDEBAR =====================
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/3222/3222640.png", width=80)
-    st.title("Dashboard UMKM")
+    st.title("Dashboard SIPETA UMKM")
 
     menu = st.radio(
         "Navigasi",
@@ -68,22 +68,15 @@ with st.sidebar:
             "💎 Ringkasan Data",
             "📈 Visualisasi Data",
             "🗺️ Pemetaan UMKM",
-            "📋 Data Mentah",
-            "🤖 AI Business Assistant"
+            "📋 Data Mentah"
         ]
     )
 
-    st.markdown("---")
     st.subheader("📍 Filter Wilayah Global")
     wilayah_sidebar = st.selectbox(
         "Pilih Wilayah",
         ["Daerah Jawa Barat"] + list(KOTA_COORDS.keys())
     )
-    
-    # Input API Key untuk Chatbot
-    if menu == "🤖 AI Business Assistant":
-        st.markdown("---")
-        openai_api_key = st.text_input("OpenAI API Key", type="password", help="Masukkan API Key Anda untuk mengaktifkan AI")
 
 # ===================== FILTER GLOBAL =====================
 f_df = df.copy()
@@ -105,25 +98,46 @@ if menu == "💎 Ringkasan Data":
     c4.metric("Potensi Pasar", potensi)
 
     st.markdown("---")
-    col_left, col_right = st.columns(2)
+    
+    col_left, col_right = st.columns([1, 1.2])
 
     with col_left:
-        st.subheader("💡 Rekomendasi Peluang Buka Usaha")
+        st.subheader("💡 Rekomendasi Peluang")
         if not f_df.empty:
             counts = f_df['Kelompok_Bisnis'].value_counts()
-            st.info(f"**Market Gap Detected:** Sektor **{counts.idxmin()}** memiliki kompetisi terendah.")
-            st.warning(f"**Saturasi Tinggi:** Sektor **{counts.idxmax()}** sangat padat.")
+            st.info(f"**Market Gap:** Sektor **{counts.idxmin()}** memiliki kompetisi terendah.")
+            st.warning(f"**Saturasi Tinggi:** Sektor **{counts.idxmax()}** sudah sangat padat.")
+            
+            st.write("---")
+            st.write("**Top 3 Kategori Populer:**")
+            for i, (kat, val) in enumerate(counts.head(3).items()):
+                st.write(f"{i+1}. {kat} ({val} Outlet)")
         else:
-            st.write("Data kosong.")
+            st.write("Data tidak tersedia untuk wilayah ini.")
 
     with col_right:
-        fig = px.sunburst(
-            f_df,
-            path=['Kelompok_Bisnis', 'Kategori'],
-            values='Rating',
-            title="Struktur Pasar Kuliner"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        if not f_df.empty:
+            # MEMBUAT PIE CHART DENGAN PERSENTASE
+            pie_df = f_df['Kelompok_Bisnis'].value_counts().reset_index()
+            pie_df.columns = ['Kelompok', 'Jumlah']
+            
+            fig = px.pie(
+                pie_df, 
+                values='Jumlah', 
+                names='Kelompok', 
+                title="Persentase Distribusi Sektor Kuliner",
+                color_discrete_sequence=px.colors.qualitative.Pastel,
+                hole=0.4
+            )
+            
+            # Pengaturan untuk menampilkan label dan persentase
+            fig.update_traces(
+                textposition='inside', 
+                textinfo='percent+label',
+                hoverinfo='label+value+percent'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
 
 # ===================== MENU 2: VISUALISASI =====================
 elif menu == "📈 Visualisasi Data":
@@ -140,7 +154,8 @@ elif menu == "📈 Visualisasi Data":
             x='Kategori',
             y='Total',
             color='Avg_Rating',
-            title="Jumlah UMKM per Kategori"
+            title="Jumlah UMKM per Kategori & Kualitas Rating",
+            color_continuous_scale='RdYlGn'
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -153,7 +168,7 @@ elif menu == "🗺️ Pemetaan UMKM":
     col_map, col_filter = st.columns([3, 1])
 
     with col_filter:
-        st.subheader("🔍 Pencarian Peta")
+        st.subheader("🔍 Filter Peta")
         keyword = st.text_input("Cari Nama UMKM")
         show_heatmap = st.checkbox("Aktifkan Heatmap")
 
@@ -171,10 +186,10 @@ elif menu == "🗺️ Pemetaan UMKM":
 
     with col_map:
         if map_df.empty:
-            st.warning(f"❌ Tidak ada data UMKM ditemukan")
+            st.warning(f"❌ Tidak ada koordinat data ditemukan")
         else:
             center = KOTA_COORDS.get(wilayah_sidebar, (-6.9175, 107.6191))
-            m = folium.Map(location=center, zoom_start=11, tiles="CartoDB positron", control_scale=True)
+            m = folium.Map(location=center, zoom_start=11, tiles="CartoDB positron")
 
             if selected_umkm:
                 r = map_df[map_df['Nama'] == selected_umkm].iloc[0]
@@ -198,68 +213,22 @@ elif menu == "🗺️ Pemetaan UMKM":
                     continue
                 folium.Marker(
                     [row['lat'], row['lng']],
-                    popup=f"<b>{row['Nama']}</b><br>⭐ {row['Rating']}",
+                    popup=f"<b>{row['Nama']}</b><br>Kategori: {row['Kategori']}<br>⭐ {row['Rating']}",
                     icon=folium.Icon(color="blue", icon="info-sign")
                 ).add_to(cluster)
 
-            st_folium(m, width="100%", height=550, key=f"map_{wilayah_sidebar}", returned_objects=[])
+            st_folium(m, width="100%", height=500, key=f"map_{wilayah_sidebar}")
             
     st.markdown("---")
-    st.subheader(f"📋 Daftar UMKM: {wilayah_sidebar}")
-    if not map_df.empty:
-        display_table = map_df[['Nama', 'Wilayah', 'Kategori', 'Rating']].copy()
-        display_table.index = range(1, len(display_table) + 1)
-        st.dataframe(display_table, use_container_width=True)
+    st.subheader(f"📋 Tabel Data: {wilayah_sidebar}")
+    st.dataframe(map_df[['Nama', 'Wilayah', 'Kategori', 'Rating']], use_container_width=True)
 
 # ===================== MENU 4: DATA MENTAH =====================
 elif menu == "📋 Data Mentah":
     st.title("📋 Data Mentah UMKM")
-    df_display = df.copy()
-    df_display.index = range(1, len(df_display) + 1)
-    st.dataframe(df_display, use_container_width=True)
-
-## ===================== MENU 5: AI ASSISTANT =====================
-elif menu == "🤖 AI Business Assistant":
-    st.title("🤖 SIPETA AI Assistant")
-    
-    # Inisialisasi Client OpenAI (Sintaks Baru v1.0.0+)
-    from openai import OpenAI
-    
-    try:
-        # Mengambil API Key dari Secrets
-        client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    except Exception as e:
-        st.error("⚠️ API Key tidak ditemukan atau terjadi kesalahan pada Secrets.")
-        st.stop()
-
-    if "messages" not in st.session_state:
-        st.session_state.messages = [
-            {"role": "system", "content": "Anda adalah konsultan bisnis UMKM ahli untuk wilayah Jawa Barat."}
-        ]
-
-    # Tampilkan chat
-    for message in st.session_state.messages:
-        if message["role"] != "system":
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-
-    # Logika Chat Input
-    if prompt := st.chat_input("Tanyakan sesuatu tentang peluang bisnis..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            # Sintaks Baru untuk Chat Completion
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=st.session_state.messages
-            )
-            answer = response.choices[0].message.content
-            st.markdown(answer)
-            st.session_state.messages.append({"role": "assistant", "content": answer})
+    st.write("Data keseluruhan yang dimuat dalam sistem:")
+    st.dataframe(df, use_container_width=True)
 
 # ===================== FOOTER =====================
 st.sidebar.markdown("---")
-st.sidebar.caption("© SIPETA 2026")
-
+st.sidebar.caption("© SIPETA 2026 | Visualisasi UMKM Jawa Barat")
